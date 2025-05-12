@@ -25,7 +25,7 @@ from networks import create_architecture, count_parameters
 import matplotlib.pyplot as plt
 import pprint
 import random
-
+import torch.nn.init as init
 
 
 
@@ -89,6 +89,15 @@ def add_training_arguments(parser):
         help="Whether the network is going to be trained",
     )
 
+    # ICML paper settings
+    parser.add_argument('--fix_backbone', action='store_true', help='Perform linear probing while freezing the rest of the model')
+    parser.add_argument('--stay_positive', type=str, default=None, help='Whether to rely on sigmoiding the weights or clamping them')
+    parser.add_argument(
+        "--unfreeze_last_k", type=int, default=0, help="How many unfrozen blocks in case of fix backbone"
+    )
+    parser.add_argument(
+                "--final_dropout", type=float, default=0.5, help="Dropout in the final layer"
+                    )
     return parser
 
 class TrainingModel(torch.nn.Module):
@@ -102,13 +111,17 @@ class TrainingModel(torch.nn.Module):
         self.device = torch.device('cpu') if opt.no_cuda else torch.device('cuda:0')
         
         #Granting functionality to start with random init instead of pretrained resnet50 weights
-        self.model = create_architecture(opt.arch, pretrained=not opt.start_fresh,  num_classes=1,leaky=opt.use_leaky,ckpt=opt.ckpt, use_proj=self.opt.use_proj, proj_ratio=opt.proj_ratio)
+        self.model = create_architecture(opt.arch, pretrained=not opt.start_fresh,  num_classes=1,leaky=opt.use_leaky,ckpt=opt.ckpt, use_proj=self.opt.use_proj, proj_ratio=opt.proj_ratio,dropout=opt.final_dropout)
 
         num_parameters = count_parameters(self.model)
         print(f"Arch: {opt.arch} with #trainable {num_parameters}")
 
         print('lr:', opt.lr)
         self.loss_fn = torch.nn.BCEWithLogitsLoss().to(self.device)
+
+        if self.opt.fix_backbone:
+            self.freeze_backbone(unfreeze_last_k=self.opt.unfreeze_last_k)
+
         parameters = filter(lambda p: p.requires_grad, self.model.parameters())
         if opt.optim == "adam":
             self.optimizer = torch.optim.Adam(
@@ -129,6 +142,31 @@ class TrainingModel(torch.nn.Module):
         if opt.continue_epoch is not None:
             self.load_networks(opt.continue_epoch)
         self.model.to(self.device)
+
+    def freeze_backbone(self, unfreeze_last_k: int = 0):
+        """
+        Freezes all backbone layers except for the last `k` blocks and the final fully connected (fc) layer.
+        Additionally zero-initializes the weights and biases for layers not frozen.
+
+        Args:
+            unfreeze_last_k (int): Number of blocks from the end to keep unfrozen.
+        """
+        # Get all blocks in the model (assuming blocks are named layer1, layer2, etc.)
+        backbone_blocks = [name for name, _ in self.model.named_children() if name.startswith("layer")]
+        
+        # Determine the blocks to freeze and unfreeze
+        blocks_to_unfreeze = backbone_blocks[-unfreeze_last_k:] if unfreeze_last_k > 0 else []
+        for name, param in self.model.named_parameters():
+            # Check if the parameter belongs to a backbone block
+            block_name = name.split('.')[0]
+            if block_name in blocks_to_unfreeze or 'fc' in name:  # Unfreeze
+                param.requires_grad = True
+                if 'fc' in name:
+                    param.data.zero_()
+            else:  
+                param.requires_grad = False
+                module = dict(self.model.named_modules())[block_name]
+                module.eval()
 
     def adjust_learning_rate(self, min_lr=1e-6):
         for param_group in self.optimizer.param_groups:
@@ -169,7 +207,11 @@ class TrainingModel(torch.nn.Module):
         self.optimizer.zero_grad()
         loss.backward()
         self.optimizer.step()
-    
+
+        # Stay-Positive Update (ICML)
+        if self.opt.stay_positive == 'clamp':
+            with torch.no_grad():
+                self.model.fc.weight.data.clamp_(min=0)
         return loss.cpu()
 
     def save_networks(self, epoch):

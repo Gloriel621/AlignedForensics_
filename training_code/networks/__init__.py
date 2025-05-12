@@ -53,21 +53,21 @@ def compare_parameters(model, state_dict):
                     print(f"Parameter {key} has not changed.")
 
 
-def create_architecture(name_arch, pretrained=False, num_classes=1, leaky=False,ckpt=None, use_proj=False, proj_ratio=None):
+def create_architecture(name_arch, pretrained=False, num_classes=1, leaky=False,ckpt=None, use_proj=False, proj_ratio=None, dropout=0.5):
     print('Weights status:', pretrained)
     if name_arch == "res50nodown":
         from .resnet_mod import resnet50
 
         if pretrained:
-            model = resnet50(pretrained=True, stride0=1, dropout=0.5,leaky=leaky, use_proj=use_proj, proj_ratio=proj_ratio).change_output(num_classes,use_proj=use_proj)
+            model = resnet50(pretrained=True, stride0=1, dropout=dropout,leaky=leaky, use_proj=use_proj, proj_ratio=proj_ratio).change_output(num_classes,use_proj=use_proj)
         else:
-            model = resnet50(num_classes=num_classes, stride0=1, dropout=0.5,leaky=leaky, use_proj=use_proj, proj_ratio=proj_ratio)
+            model = resnet50(num_classes=num_classes, stride0=1, dropout=dropout,leaky=leaky, use_proj=use_proj, proj_ratio=proj_ratio)
         if ckpt is not None:
             load_weights(model, model_path=ckpt)
         
     elif name_arch == "res50nodown_dino":
         from .resnet_mod import resnet50
-        model = resnet50(num_classes=num_classes, stride0=1, dropout=0.5,leaky=leaky, use_proj=use_proj)
+        model = resnet50(num_classes=num_classes, stride0=1, dropout=dropout,leaky=leaky, use_proj=use_proj)
         load_result = model.load_state_dict(torch.load(ckpt),strict=False ) 
         missing_keys = load_result.missing_keys
         unexpected_keys = load_result.unexpected_keys
@@ -83,9 +83,9 @@ def create_architecture(name_arch, pretrained=False, num_classes=1, leaky=False,
         from .resnet_mod import resnet18
         
         if pretrained:
-            model = resnet18(pretrained=True, stride0=1,dropout=0.5,leaky=leaky, use_proj=use_proj).change_output(num_classes)
+            model = resnet18(pretrained=True, stride0=1,dropout=dropout,leaky=leaky, use_proj=use_proj).change_output(num_classes)
         else:
-            model = resnet18(num_classes=num_classes, stride0=1, dropout=0.5,leaky=leaky, use_proj=use_proj)
+            model = resnet18(num_classes=num_classes, stride0=1, dropout=dropout,leaky=leaky, use_proj=use_proj)
 
     else:
         assert False
