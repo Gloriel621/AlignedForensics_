@@ -15,6 +15,7 @@ Our Detectors from the ICML paper (Stay-Positive)
 - [Rajan/Ours +](https://drive.google.com/file/d/14k9qakoIh36Z6U-fVHHjhvs667aywzfz/view?usp=sharing) (ResNet-50)
 ## Evaluation Dataset
 In order to download the dataset that we use for our evaluation, please use the following [link](https://huggingface.co/datasets/AniSundar18/Robust_LDM_Benchmark).
+For the dataset used in the ICML paper, which includes additional images from FLUX, Wuerstchen and aMUSEd, please use the following [link](https://huggingface.co/datasets/AniSundar18/LDMFakeDetect).
 
 ## Citation
 If you find this code useful in your research, consider citing our work:
