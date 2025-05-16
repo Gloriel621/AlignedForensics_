@@ -10,6 +10,9 @@ Our pre-trained fake image detectors can be found below,
 - [Ours (shaders)](https://drive.google.com/file/d/1pqM8z10--509vS98yNTebI8OzvDqLPgI/view?usp=sharing) (ResNet-50 trained on shaders)
 - [Ours-Sync (shaders)](https://drive.google.com/file/d/1wDZe_P5xiAbELZLV-PmYK5Hkh_BG6Eah/view?usp=sharing) (ResNet-50 trained on shaders, with sync'd batches)
 
+Our Detectors from the ICML paper (Stay-Positive)
+- [Corvi +](https://drive.google.com/file/d/1ACoiwC8BM0NpyhAwbKsyAk1Da-TAoRRy/view?usp=sharing) (ResNet-50 trained without sync'd batches)
+- [Rajan/Ours +](https://drive.google.com/file/d/14k9qakoIh36Z6U-fVHHjhvs667aywzfz/view?usp=sharing) (ResNet-50 trained with sync'd batches)
 ## Evaluation Dataset
 In order to download the dataset that we use for our evaluation, please use the following [link](https://huggingface.co/datasets/AniSundar18/Robust_LDM_Benchmark).
 
