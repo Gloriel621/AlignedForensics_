@@ -1,4 +1,4 @@
-# Aligned Datasets Improve Detection of Latent Diffusion-Generated Images
+# Improving Detectors by Mitigating Spurious Correlations
 
 Official repository of [Aligned Datasets Improve Detection of Latent Diffusion-Generated Images](https://arxiv.org/abs/2410.11835) (ICLR 2025) and [Stay-Positive: A Case for Ignoring Real Image Features in Fake Image Detection](https://arxiv.org/abs/2502.07778) (ICML 2025). The specific instructions for training the models and reproducing the plots can be found in the **training_code** and **testing_code** directories.
 
