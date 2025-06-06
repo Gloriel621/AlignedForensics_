@@ -32,9 +32,9 @@ url={https://openreview.net/forum?id=doBkiqESYq}
 ```
 ```
 @inproceedings{
-anonymous2025staypositive,
+rajan2025staypositive,
 title={Stay-Positive: A Case for Ignoring Real Image Features in Fake Image Detection},
-author={Anonymous},
+author={{Anirudh Sundara Rajan and Yong Jae Lee},
 booktitle={Forty-second International Conference on Machine Learning},
 year={2025},
 url={https://openreview.net/forum?id=VNLmfMJi3w}
