@@ -182,37 +182,38 @@ class TrainingModel(torch.nn.Module):
     def train_on_batch(self, data):
         self.total_steps += 1
         self.model.train()
-        #grads = {name: [] for name, param in self.model.named_parameters() if param.requires_grad}
+
         if self.opt.batched_syncing:
-            rdata = data[0]
-            fdata = data[1]
-            input = torch.cat((rdata['img'], fdata['img']), dim=0).to(self.device)
-            label = torch.cat((rdata['target'], fdata['target']), dim=0).to(self.device).float()
+            rdata, fdata = data
+            x   = torch.cat((rdata["img"],    fdata["img"]),    0).to(self.device)
+            y   = torch.cat((rdata["target"], fdata["target"]), 0).float().to(self.device)
         else:
-            input = data['img'].to(self.device)
-            label = data['target'].to(self.device).float()
-        output, feats = self.model(input, return_feats=self.opt.use_contrastive)
+            x = data["img"].to(self.device)
+            y = data["target"].float().to(self.device)
 
+        logits, _ = self.model(x, return_feats=self.opt.use_contrastive)
 
-        if len(output.shape) == 4:
-            ss = output.shape
-            loss = self.loss_fn(
-                output,
-                label[:, None, None, None].repeat(
-                (1, int(ss[1]), int(ss[2]), int(ss[3]))
-                ),
-            )
+        if logits.ndim == 4:                      # spatial classifier
+            sz   = logits.shape
+            loss = self.loss_fn(logits,
+                                y[:, None, None, None].repeat(1, sz[1], sz[2], sz[3]))
+            preds = (logits.mean(dim=(2, 3)) > 0).float()
         else:
-            loss = self.loss_fn(output.squeeze(1), label)
+            loss  = self.loss_fn(logits.squeeze(1), y)
+            preds = (logits.squeeze(1) > 0).float()
+
+        corr = (preds == y).sum().item()
+        tot  = y.numel()
+
         self.optimizer.zero_grad()
         loss.backward()
         self.optimizer.step()
 
-        # Stay-Positive Update (ICML)
-        if self.opt.stay_positive == 'clamp':
+        if self.opt.stay_positive == "clamp":
             with torch.no_grad():
                 self.model.fc.weight.data.clamp_(min=0)
-        return loss.cpu()
+
+        return loss.item(), corr, tot
 
     def save_networks(self, epoch):
         save_filename = 'model_epoch_%s.pth' % epoch

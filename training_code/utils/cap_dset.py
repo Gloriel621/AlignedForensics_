@@ -3,6 +3,7 @@ import pprint
 from typing import Any, Callable, cast, Dict, List, Optional, Tuple, Union
 import random
 import numpy as np
+from tqdm import tqdm
 from PIL import Image
 from torchvision.utils import save_image
 from torch.utils.data import Dataset
@@ -79,7 +80,6 @@ class CapDataset(Dataset):
                 fpath = os.path.join(self.root_dir, fpaths[idx])
                 self.files.append((rpath, 0))
                 self.files.append((fpath,1))
-            #fpaths = os.listdir(os.path.join(self.root_dir, '1_fake'))
 
 
     def filter_dataset(self, keep_count):
@@ -97,7 +97,7 @@ class CapDataset(Dataset):
             np.random.seed(SEED)
             torch.manual_seed(SEED)
             torch.cuda.manual_seed(SEED)
-            #torch.manual_seed(current_time_seed)
+
             sample = self.transform(sample)
             fpath = path.replace('.jpg','.png').replace('0_real', '1_fake')
             if not os.path.exists(fpath):
@@ -113,4 +113,103 @@ class CapDataset(Dataset):
             if self.transform is not None:
                 sample = self.transform(sample)
             return {"img": sample, "target": target, "path": path}
+            
+class CapDataset_(Dataset):
+    def __init__(self,
+                 real_dir,
+                 fake_dir,
+                 data_cap=None,
+                 transform=None,
+                 batched_syncing=False,
+                 use_inversions=False,
+                 seed: int = 17,
+                 real_exts = ('.jpg', '.jpeg', '.png'),
+                 fake_ext = '.png'):
 
+        self.real_dir        = real_dir
+        self.fake_dir        = fake_dir
+        self.transform       = transform
+        self.batched_syncing = batched_syncing
+        self.use_inversions  = use_inversions
+
+        if self.batched_syncing:
+            self.recorder = TransformRecorder(self.transform)
+
+        real_files = [f for f in os.listdir(real_dir)
+                      if f.lower().endswith(real_exts)]
+        real_files.sort()
+        random.seed(seed)
+        if data_cap is not None:
+            real_files = random.sample(real_files, min(data_cap, len(real_files)))
+
+        fake_lookup: dict[str, str] = {}
+        if use_inversions:
+            for f in os.listdir(fake_dir):
+                if f.lower().endswith(fake_ext):
+                    fake_lookup[os.path.splitext(f)[0]] = os.path.join(fake_dir, f)
+        else:
+            # fallback list for non-inversion mode
+            fake_pool = [os.path.join(fake_dir, f)
+                         for f in os.listdir(fake_dir)
+                         if f.lower().endswith(real_exts)]
+            random.shuffle(fake_pool)
+
+        self.files: list[tuple[str, int]] = []
+        self._fake_index: dict[str, str] = {}   # only used when syncing
+
+        for idx, rf in enumerate(tqdm(real_files, desc="Indexing real/fake pairs")):
+            r_path = os.path.join(real_dir, rf)
+            base   = os.path.splitext(rf)[0]
+
+            if use_inversions:
+                f_path = fake_lookup.get(base, None)
+            else:
+                f_path = fake_pool[idx % len(fake_pool)] if fake_pool else None
+
+            # keep only reals with a mate
+            if f_path is None or not os.path.isfile(f_path):
+                continue
+
+            self.files.append((r_path, 0))
+
+            if self.batched_syncing:
+                self._fake_index[base] = f_path   # retrieved on-the-fly later
+            else:
+                self.files.append((f_path, 1))
+
+    def filter_dataset(self, keep_count):
+        self.files = self.files[keep_count:]
+
+    def __len__(self):
+        return len(self.files)
+
+    def __getitem__(self, index):
+        path, target = self.files[index]
+        sample = default_loader(path)
+
+        if self.batched_syncing:
+            SEED = int(time.time())
+            random.seed(SEED);  np.random.seed(SEED)
+            torch.manual_seed(SEED);  torch.cuda.manual_seed(SEED)
+
+            if self.transform is not None:
+                sample = self.transform(sample)
+
+            base  = os.path.splitext(os.path.basename(path))[0]
+            fpath = self._fake_index[base]                       # mapped at init
+            fsample = default_loader(fpath)
+
+            random.seed(SEED);  np.random.seed(SEED)
+            torch.manual_seed(SEED);  torch.cuda.manual_seed(SEED)
+
+            if self.transform is not None:
+                fsample = self.transform(fsample)
+
+            return (
+                {"img": sample,  "target": target, "path": path},
+                {"img": fsample, "target": 1,      "path": fpath},
+            )
+        else:
+            if self.transform is not None:
+                sample = self.transform(sample)
+            return {"img": sample, "target": target, "path": path}

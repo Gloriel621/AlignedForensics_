@@ -30,31 +30,37 @@ if __name__ == "__main__":
 
     opt = parser.parse_args()
     torch.manual_seed(opt.seed)
-    #Changed from val to valid
-    valid_data_loader = create_dataloader(opt, subdir="valid", is_train=False)
+
     train_data_loader = create_dataloader(opt, subdir="train", is_train=True)
+    valid_data_loader = create_dataloader(opt, subdir="valid", is_train=False)
+
     print()
+    print("# training batches = %d" % len(train_data_loader))
     print("# validation batches = %d" % len(valid_data_loader))
-    print("#   training batches = %d" % len(train_data_loader))
+
     model = TrainingModel(opt, subdir=opt.name)
     writer = SummaryWriter(os.path.join(model.save_dir, "logs"))
     writer_loss_steps = len(train_data_loader) // 32
     early_stopping = None
     start_epoch = model.total_steps // len(train_data_loader)
 
-    for epoch in range(start_epoch, opt.num_epoches+1):
-        if  epoch > start_epoch:
-            # Training
+    for epoch in range(start_epoch, opt.num_epoches + 1):
+        if epoch > start_epoch:
             pbar = tqdm.tqdm(train_data_loader)
-            for data in pbar:
-                loss = model.train_on_batch(data).item()
-                pbar.set_description(f"Train loss: {loss:.4f}")
-                total_steps = model.total_steps
-                if total_steps % writer_loss_steps == 0:
-                    writer.add_scalar("train/loss", loss, total_steps)
+            ep_corr, ep_seen = 0, 0
+            for batch in pbar:
+                loss, corr, tot = model.train_on_batch(batch)
+                ep_corr += corr
+                ep_seen += tot
+                pbar.set_description(f"loss {loss:.4f} | acc {ep_corr / ep_seen:.3f}")
 
-            # Save model
-            model.save_networks(epoch)
+                if model.total_steps % writer_loss_steps == 0:
+                    writer.add_scalar("train/loss", loss, model.total_steps)
+
+            writer.add_scalar("train/accuracy", ep_corr / ep_seen, model.total_steps)
+            
+            if epoch % 10 == 0:
+                model.save_networks(epoch)
 
         # Validation
         print("Validation ...", flush=True)

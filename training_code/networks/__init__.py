@@ -59,6 +59,7 @@ def create_architecture(name_arch, pretrained=False, num_classes=1, leaky=False,
         from .resnet_mod import resnet50
 
         if pretrained:
+            print("Loading pretrained resnet50")
             model = resnet50(pretrained=True, stride0=1, dropout=dropout,leaky=leaky, use_proj=use_proj, proj_ratio=proj_ratio).change_output(num_classes,use_proj=use_proj)
         else:
             model = resnet50(num_classes=num_classes, stride0=1, dropout=dropout,leaky=leaky, use_proj=use_proj, proj_ratio=proj_ratio)

@@ -455,14 +455,16 @@ def create_noise_transforms(p, var_limit=(10.0, 50.0)):
 
 
 def create_cutout_transforms(p):
-    try:
-        from albumentations.augmentations.dropout.cutout import Cutout
-    except:
-        from albumentations.augmentations.transforms import Cutout
-    aug = Cutout(
-        num_holes=1,
-        max_h_size=48,
-        max_w_size=48,
+    from albumentations import CoarseDropout
+    # try:
+    #     from albumentations.augmentations.dropout.cutout import Cutout
+    # except:
+    #     from albumentations.augmentations.transforms import Cutout
+    aug = CoarseDropout(
+        min_holes=0,
+        max_holes=1,
+        max_height=48,
+        max_width=48,
         fill_value=128,
         always_apply=False,
         p=p,
