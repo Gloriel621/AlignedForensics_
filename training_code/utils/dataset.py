@@ -116,6 +116,13 @@ def add_dataloader_arguments(parser):
                         help="Folder with counterfeit images (overrides dataroot)")
     parser.add_argument("--val_split", type=float, default=0.1,
                         help="Fraction reserved for validation when real_dir/fake_dir are used")
+
+    # --- Optional ---
+    parser.add_argument("--val_real_dir", type=str, default=None,
+                        help="Folder with separate genuine images for validation")
+    parser.add_argument("--val_fake_dir", type=str, default=None,
+                        help="Folder with separate counterfeit images for validation")
+
     parser = add_processing_arguments(parser)
     return parser
 
@@ -128,44 +135,79 @@ def create_dataloader(opt, subdir=".", is_train=True):
     if getattr(opt, "real_dir", None) and getattr(opt, "fake_dir", None):
 
         if not hasattr(opt, "_tfds"):
-            real_exts = ('.jpg', '.jpeg', '.png')
-            all_real_files = sorted([f for f in os.listdir(opt.real_dir)
-                                     if f.lower().endswith(real_exts)])
-
-            if opt.data_cap is not None:
-                all_real_files = random.sample(all_real_files, min(opt.data_cap, len(all_real_files)))
-
-            val_len = int(len(all_real_files) * opt.val_split)
-            train_len = len(all_real_files) - val_len
-            
-            indices = list(range(len(all_real_files)))
-            random.shuffle(indices)
-            train_indices = indices[:train_len]
-            valid_indices = indices[train_len:]
-            
-            train_files = [all_real_files[i] for i in train_indices]
-            valid_files = [all_real_files[i] for i in valid_indices]
-
             tfm = make_processing(opt)
-            
-            ds_train = CapDataset_(
-                opt.real_dir, opt.fake_dir, transform=tfm,
-                file_list=train_files,
-                batched_syncing=True,
-                use_inversions=opt.use_inversions, seed=opt.seed
-            )
-            
-            ds_valid = CapDataset_(
-                opt.real_dir, opt.fake_dir, transform=tfm,
-                file_list=valid_files,
-                batched_syncing=False,
-                use_inversions=opt.use_inversions, seed=opt.seed
-            )
+            # Check if a separate validation set is provided.
+            if opt.val_real_dir and opt.val_fake_dir:
+                print("Using separate validation set. '--val_split' will be ignored.")
+                
+                # 1. Create the TRAINING dataset using all files from the main directories
+                train_real_files = sorted([f for f in os.listdir(opt.real_dir)
+                                           if f.lower().endswith(('.jpg', '.jpeg', '.png'))])
+                
+                if opt.data_cap is not None:
+                    train_real_files = random.sample(train_real_files, min(opt.data_cap, len(train_real_files)))
+                
+                ds_train = CapDataset_(
+                    opt.real_dir, opt.fake_dir, transform=tfm,
+                    file_list=train_real_files,
+                    batched_syncing=True, # Train set should be synced
+                    use_inversions=opt.use_inversions, seed=opt.seed
+                )
+                
+                # 2. Create the VALIDATION dataset from the separate validation directories
+                # --data_cap is not applied to the validation set.
+                ds_valid = CapDataset_(
+                    opt.val_real_dir, opt.val_fake_dir, transform=tfm,
+                    file_list=None,
+                    batched_syncing=False, # Validation set is not synced
+                    use_inversions=False, # name is not matched either.
+                    seed=opt.seed
+                )
 
+            # Use val_split if no separate set is provided.
+            else:
+                print(f"No separate validation set provided. Using '--val_split={opt.val_split}'.")
+                
+                # This is the existing logic you already have
+                real_exts = ('.jpg', '.jpeg', '.png')
+                all_real_files = sorted([f for f in os.listdir(opt.real_dir)
+                                         if f.lower().endswith(real_exts)])
+
+                if opt.data_cap is not None:
+                    all_real_files = random.sample(all_real_files, min(opt.data_cap, len(all_real_files)))
+
+                val_len = int(len(all_real_files) * opt.val_split)
+                train_len = len(all_real_files) - val_len
+                
+                indices = list(range(len(all_real_files)))
+                random.shuffle(indices)
+                train_indices = indices[:train_len]
+                valid_indices = indices[train_len:]
+                
+                train_files = [all_real_files[i] for i in train_indices]
+                valid_files = [all_real_files[i] for i in valid_indices]
+                
+                ds_train = CapDataset_(
+                    opt.real_dir, opt.fake_dir, transform=tfm,
+                    file_list=train_files,
+                    batched_syncing=True,
+                    use_inversions=opt.use_inversions, seed=opt.seed
+                )
+                
+                ds_valid = CapDataset_(
+                    opt.real_dir, opt.fake_dir, transform=tfm,
+                    file_list=valid_files,
+                    batched_syncing=False,
+                    use_inversions=opt.use_inversions, seed=opt.seed
+                )
+
+            # Store the created datasets in the options object to avoid recreating them
             opt._tfds = {"train": ds_train, "valid": ds_valid}
 
+        # Return the correct dataset based on whether we are training or validating
         dataset = opt._tfds["train" if is_train else "valid"]
     else:
+        # This is the original fallback for other dataset types, it remains unchanged
         dataroot = os.path.join(opt.dataroot, subdir)
         if (opt.data_cap is not None or opt.batched_syncing) and is_train:
             tfm = make_processing(opt)
@@ -173,6 +215,7 @@ def create_dataloader(opt, subdir=".", is_train=True):
             dataset = torch.utils.data.ConcatDataset([dataset])
         else:
             dataset = get_dataset(opt, dataroot)
+            
     loader = DataLoader(dataset, batch_size=opt.batch_size, sampler=get_bal_sampler(dataset) if is_train else None, num_workers=int(opt.num_threads))
     return loader
 
