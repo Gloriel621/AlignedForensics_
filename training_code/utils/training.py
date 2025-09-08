@@ -176,7 +176,7 @@ class TrainingModel(torch.nn.Module):
         for param_group in self.optimizer.param_groups:
             return param_group["lr"]
 
-    def train_on_batch(self, data):
+    def train_on_batch(self, data, accumulation_step):
         self.total_steps += 1
         self.model.train()
 
@@ -205,7 +205,7 @@ class TrainingModel(torch.nn.Module):
         # --- MODIFICATION FOR GRADIENT ACCUMULATION ---
         loss = loss / self.opt.gradient_accumulation_steps
         loss.backward()
-        if (batch_idx + 1) % self.opt.gradient_accumulation_steps == 0:
+        if accumulation_step == self.opt.gradient_accumulation_steps - 1:
             self.optimizer.step()
             self.optimizer.zero_grad()
 
