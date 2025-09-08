@@ -124,7 +124,8 @@ class CapDataset_(Dataset):
                  use_inversions=False,
                  seed: int = 17,
                  real_exts = ('.jpg', '.jpeg', '.png'),
-                 fake_ext = '.png'):
+                 fake_ext = '.png',
+                 file_list: Optional[List[str]] = None):
 
         self.real_dir        = real_dir
         self.fake_dir        = fake_dir
@@ -135,12 +136,17 @@ class CapDataset_(Dataset):
         if self.batched_syncing:
             self.recorder = TransformRecorder(self.transform)
 
-        real_files = [f for f in os.listdir(real_dir)
-                      if f.lower().endswith(real_exts)]
-        real_files.sort()
-        random.seed(seed)
-        if data_cap is not None:
-            real_files = random.sample(real_files, min(data_cap, len(real_files)))
+        # If a file list isn't provided, create one by reading the directory.
+        if file_list is None:
+            real_files = [f for f in os.listdir(real_dir)
+                          if f.lower().endswith(real_exts)]
+            real_files.sort()
+            random.seed(seed)
+            if data_cap is not None:
+                real_files = random.sample(real_files, min(data_cap, len(real_files)))
+        # If a list is provided, use it directly.
+        else:
+            real_files = file_list
 
         fake_lookup: dict[str, str] = {}
         if use_inversions:

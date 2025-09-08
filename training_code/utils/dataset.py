@@ -122,45 +122,47 @@ def add_dataloader_arguments(parser):
 def create_dataloader(opt, subdir=".", is_train=True):
 
     np.random.seed(opt.seed)
+    torch.manual_seed(opt.seed)
+    random.seed(opt.seed)
 
     if getattr(opt, "real_dir", None) and getattr(opt, "fake_dir", None):
 
         if not hasattr(opt, "_tfds"):
-            tfm = make_processing(opt)
+            real_exts = ('.jpg', '.jpeg', '.png')
+            all_real_files = sorted([f for f in os.listdir(opt.real_dir)
+                                     if f.lower().endswith(real_exts)])
 
-            ds_train = CapDataset_(
-                opt.real_dir, opt.fake_dir,
-                transform=tfm,
-                batched_syncing=opt.batched_syncing,
-                data_cap=opt.data_cap,
-                use_inversions=opt.use_inversions,
-                seed=opt.seed,
-            )
-
-            val_cap = None
             if opt.data_cap is not None:
-                val_cap = max(1, opt.data_cap // 5)
+                all_real_files = random.sample(all_real_files, min(opt.data_cap, len(all_real_files)))
 
+            val_len = int(len(all_real_files) * opt.val_split)
+            train_len = len(all_real_files) - val_len
+            
+            indices = list(range(len(all_real_files)))
+            random.shuffle(indices)
+            train_indices = indices[:train_len]
+            valid_indices = indices[train_len:]
+            
+            train_files = [all_real_files[i] for i in train_indices]
+            valid_files = [all_real_files[i] for i in valid_indices]
+
+            tfm = make_processing(opt)
+            
+            ds_train = CapDataset_(
+                opt.real_dir, opt.fake_dir, transform=tfm,
+                file_list=train_files,
+                batched_syncing=True,
+                use_inversions=opt.use_inversions, seed=opt.seed
+            )
+            
             ds_valid = CapDataset_(
-                opt.real_dir, opt.fake_dir,
-                transform=tfm,
-                batched_syncing=False,        # flat batches
-                data_cap=val_cap,             # smaller set
-                use_inversions=opt.use_inversions,
-                seed=opt.seed,
+                opt.real_dir, opt.fake_dir, transform=tfm,
+                file_list=valid_files,
+                batched_syncing=False,
+                use_inversions=opt.use_inversions, seed=opt.seed
             )
 
-            val_len   = int(len(ds_train) * opt.val_split)
-            train_len = len(ds_train) - val_len
-            gen = torch.Generator().manual_seed(opt.seed)
-            idx_train, _ = torch.utils.data.random_split(
-                range(len(ds_train)), [train_len, val_len], generator=gen
-            )
-
-            opt._tfds = {
-                "train": Subset(ds_train, idx_train.indices),
-                "valid": ds_valid,            # ← no Subset here
-            }
+            opt._tfds = {"train": ds_train, "valid": ds_valid}
 
         dataset = opt._tfds["train" if is_train else "valid"]
     else:

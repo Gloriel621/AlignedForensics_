@@ -27,6 +27,12 @@ if __name__ == "__main__":
         default=5,
         help="Number of epochs without loss reduction before lowering the learning rate",
     )
+    parser.add_argument(
+        "--gradient_accumulation_steps",
+        type=int,
+        default=1,
+        help="Number of steps to accumulate gradients before updating model weights",
+    )
 
     opt = parser.parse_args()
     torch.manual_seed(opt.seed)
@@ -37,6 +43,8 @@ if __name__ == "__main__":
     print()
     print("# training batches = %d" % len(train_data_loader))
     print("# validation batches = %d" % len(valid_data_loader))
+    print("# gradient accumulation steps = %d" % opt.gradient_accumulation_steps)
+    print("# effective_batch_size = %d" % (opt.gradient_accumulation_steps * opt.batch_size))
 
     model = TrainingModel(opt, subdir=opt.name)
     writer = SummaryWriter(os.path.join(model.save_dir, "logs"))
@@ -48,8 +56,13 @@ if __name__ == "__main__":
         if epoch > start_epoch:
             pbar = tqdm.tqdm(train_data_loader)
             ep_corr, ep_seen = 0, 0
-            for batch in pbar:
-                loss, corr, tot = model.train_on_batch(batch)
+
+            model.optimizer.zero_grad()
+
+            for batch_idx, batch in enumerate(pbar):
+                accumulation_step = batch_idx % opt.gradient_accumulation_steps       
+                loss, corr, tot = model.train_on_batch(batch, accumulation_step)
+
                 ep_corr += corr
                 ep_seen += tot
                 pbar.set_description(f"loss {loss:.4f} | acc {ep_corr / ep_seen:.3f}")

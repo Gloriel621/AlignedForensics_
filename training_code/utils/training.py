@@ -28,9 +28,6 @@ import random
 import torch.nn.init as init
 
 
-
-
-
 def add_training_arguments(parser):
     # parser is an argparse.ArgumentParser
     #
@@ -205,9 +202,12 @@ class TrainingModel(torch.nn.Module):
         corr = (preds == y).sum().item()
         tot  = y.numel()
 
-        self.optimizer.zero_grad()
+        # --- MODIFICATION FOR GRADIENT ACCUMULATION ---
+        loss = loss / self.opt.gradient_accumulation_steps
         loss.backward()
-        self.optimizer.step()
+        if (batch_idx + 1) % self.opt.gradient_accumulation_steps == 0:
+            self.optimizer.step()
+            self.optimizer.zero_grad()
 
         if self.opt.stay_positive == "clamp":
             with torch.no_grad():
